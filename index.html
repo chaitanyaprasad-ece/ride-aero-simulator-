@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TVS RiDE-Aero 2.0 | Live Interactive Simulator with AI Camera Module</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .scan-line {
+      background: linear-gradient(to bottom, rgba(56, 189, 248, 0), rgba(56, 189, 248, 0.25) 50%, rgba(56, 189, 248, 0));
+      animation: scan 2.5s linear infinite;
+    }
+    @keyframes scan {
+      0% { top: -20%; }
+      100% { top: 100%; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 md:p-6 antialiased">
+
+  <!-- Header Strip -->
+  <header class="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between pb-5 border-b border-slate-800 gap-4">
+    <div>
+      <div class="flex items-center gap-3">
+        <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-red-600 text-white tracking-wider uppercase">TVS R&D</span>
+        <h1 class="text-2xl md:text-3xl font-black tracking-tight text-white">RiDE-Aero 2.0</h1>
+        <span class="text-xs px-2.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">TVS Apache RR 310</span>
+      </div>
+      <p class="text-xs md:text-sm text-slate-400 mt-1">Rider-Adaptive, Speed-Aware Motorcycle Windscreen | Hardware-in-the-Loop Simulator with Live AI Camera Perception</p>
+    </div>
+    
+    <!-- System Status Annunciator -->
+    <div class="flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl shadow-lg">
+      <div class="flex items-center gap-1.5">
+        <div id="led-green" class="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+        <span class="text-xs font-semibold text-slate-300">SYS OK</span>
+      </div>
+      <div class="w-px h-4 bg-slate-700"></div>
+      <div class="flex items-center gap-1.5">
+        <div id="led-amber" class="w-3 h-3 rounded-full bg-slate-700"></div>
+        <span class="text-xs font-semibold text-slate-300">MOTION</span>
+      </div>
+      <div class="w-px h-4 bg-slate-700"></div>
+      <div class="flex items-center gap-1.5">
+        <div id="led-red" class="w-3 h-3 rounded-full bg-slate-700"></div>
+        <span class="text-xs font-semibold text-slate-300">FAULT</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Real-Time Metrics Ribbon -->
+  <section class="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+    <div class="bg-slate-900/90 border border-slate-800 p-3 rounded-xl">
+      <div class="text-[10px] text-slate-400 uppercase font-semibold">Tilt Angle</div>
+      <div id="stat-angle" class="text-xl font-black text-white font-mono mt-0.5">55.0°</div>
+      <div class="text-[10px] text-slate-500">Target: <span id="stat-target" class="text-sky-400 font-semibold">55.0°</span> (±0.4°)</div>
+    </div>
+    <div class="bg-slate-900/90 border border-slate-800 p-3 rounded-xl">
+      <div class="text-[10px] text-slate-400 uppercase font-semibold">Actuator Current</div>
+      <div id="stat-current" class="text-xl font-black text-emerald-400 font-mono mt-0.5">0.00 A</div>
+      <div class="text-[10px] text-slate-500">Stall Limit: <span class="text-red-400">1.80 A</span></div>
+    </div>
+    <div class="bg-slate-900/90 border border-slate-800 p-3 rounded-xl">
+      <div class="text-[10px] text-slate-400 uppercase font-semibold">Visor Buffet (ΔP)</div>
+      <div id="stat-pressure" class="text-xl font-black text-sky-400 font-mono mt-0.5">0 Pa</div>
+      <div class="text-[10px] text-slate-500">Stock Fixed: <span id="stat-stock-pressure" class="text-slate-400">0 Pa</span></div>
+    </div>
+    <div class="bg-slate-900/90 border border-slate-800 p-3 rounded-xl">
+      <div class="text-[10px] text-slate-400 uppercase font-semibold">Helmet Wind Noise</div>
+      <div id="stat-noise" class="text-xl font-black text-purple-400 font-mono mt-0.5">62 dB</div>
+      <div class="text-[10px] text-slate-500">Attenuation: <span id="stat-noise-atten" class="text-emerald-400">-0 dB</span></div>
+    </div>
+  </section>
+
+  <!-- Main 3-Column Cockpit Layout -->
+  <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 mt-5">
+    
+    <!-- LEFT COLUMN: Kinematic & CFD Airflow Canvas (5 Cols) -->
+    <section class="lg:col-span-5 flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+            <span class="text-xs font-bold text-slate-200 uppercase tracking-wider">Kinematic & CFD Airflow</span>
+          </div>
+          <span id="canvas-status-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">LAMINAR FLOW</span>
+        </div>
+
+        <!-- 2D Simulation Canvas -->
+        <div class="relative w-full h-[320px] bg-slate-950 rounded-xl mt-3 overflow-hidden border border-slate-800">
+          <canvas id="aeroCanvas" class="w-full h-full block"></canvas>
+          
+          <!-- On-Canvas Telemetry Overlay -->
+          <div class="absolute top-2.5 left-2.5 bg-slate-900/85 backdrop-blur border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono space-y-0.5">
+            <div>ANGLE: <span id="disp-angle-overlay" class="text-red-400 font-bold">55.0°</span> (55° - 75°)</div>
+            <div>FLOW: <span id="disp-speed-overlay" class="text-sky-400 font-semibold">0 km/h</span></div>
+            <div>AERO FORCE: <span id="disp-drag-overlay" class="text-amber-400 font-semibold">0.0 N</span></div>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center text-[11px] text-slate-400 font-mono mt-3 px-1">
+          <span>PIVOT: Lower Fairing Axis</span>
+          <span>LEAD-SCREW: Self-Locking Acme</span>
+        </div>
+      </div>
+
+      <!-- Live Serial / CAN Telemetry Console -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between text-xs font-mono text-slate-300 pb-2 border-b border-slate-800">
+          <span class="font-bold">UART TELEMETRY STREAM (/dev/ttyAMA0)</span>
+          <span class="text-emerald-400 font-bold">CRC-8: OK</span>
+        </div>
+        <div id="serialConsole" class="h-28 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-0.5 mt-2.5 p-2 bg-slate-950 rounded-xl border border-slate-800/80">
+          <div class="text-slate-500">// System initialized. Boot sequence nominal.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CENTER COLUMN: Live AI Camera Perception Module (4 Cols) -->
+    <section class="lg:col-span-4 flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping"></span>
+              <span class="text-xs font-bold text-slate-200 uppercase tracking-wider">AI Vision Module</span>
+            </div>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800">SONY IMX708 12MP</span>
+          </div>
+
+          <!-- Live Camera Viewport Container -->
+          <div class="relative w-full h-[280px] bg-slate-950 rounded-xl mt-3 overflow-hidden border border-slate-800 flex items-center justify-center">
+            
+            <!-- Video Element (Offscreen webcam stream) -->
+            <video id="webcamVideo" autoplay playsinline muted class="absolute w-full h-full object-cover transform -scale-x-100 hidden"></video>
+            
+            <!-- Processed Vision Canvas (Renders live frame + YOLOv8 bounding boxes + keypoints) -->
+            <canvas id="visionCanvas" class="w-full h-full object-cover block"></canvas>
+            
+            <!-- Scan line animation overlay -->
+            <div class="absolute inset-x-0 h-16 scan-line pointer-events-none"></div>
+
+            <!-- On-Screen HUD Overlay -->
+            <div class="absolute top-2 left-2 bg-slate-900/85 backdrop-blur border border-slate-800 px-2.5 py-1 rounded text-[10px] font-mono space-y-0.5 text-slate-300">
+              <div class="text-sky-400 font-bold">YOLOv8n-Pose (28.4 FPS)</div>
+              <div>CONF: <span id="hud-conf" class="text-emerald-400 font-bold">96.2%</span></div>
+              <div>TORSO: <span id="hud-torso-deg" class="text-amber-400 font-bold">58.4°</span></div>
+            </div>
+
+            <!-- Stationary Calibration State Banner -->
+            <div id="banner-calib" class="absolute bottom-2 inset-x-2 py-1 px-2 rounded bg-emerald-950/90 border border-emerald-600 text-center text-[10px] font-mono font-bold text-emerald-300">
+              ● KEY-ON CALIBRATION ACTIVE (Speed = 0 km/h)
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Detected Profile Card -->
+        <div class="mt-4 p-3 bg-slate-950 rounded-xl border border-slate-800">
+          <div class="text-[10px] text-slate-400 uppercase font-semibold">Vision Classification Result</div>
+          <div class="flex items-center justify-between mt-1">
+            <span id="label-rider-detected" class="text-sm font-bold text-sky-400 font-mono">Standard Stature</span>
+            <span id="label-rider-height" class="text-xs text-white font-mono font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700">175 cm</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-400 flex justify-between">
+            <span>Dynamic Optimal Angle:</span>
+            <span id="label-rider-angle" class="font-bold text-emerald-400 font-mono">63.5°</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: HMI Controls & Adaptive Sliders (3 Cols) -->
+    <section class="lg:col-span-3 flex flex-col gap-4">
+      
+      <!-- Operating Mode Selector -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <h2 class="text-xs font-bold text-slate-200 uppercase tracking-wider mb-2.5">1. Cockpit HMI Mode</h2>
+        <div class="grid grid-cols-3 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <button id="btn-mode-auto" onclick="setMode('AUTO')" class="py-1.5 text-xs font-bold rounded-lg bg-red-600 text-white shadow transition">AUTO</button>
+          <button id="btn-mode-manual" onclick="setMode('MANUAL')" class="py-1.5 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition">MANUAL</button>
+          <button id="btn-mode-off" onclick="setMode('OFF')" class="py-1.5 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition">OFF</button>
+        </div>
+
+        <!-- Manual Handlebar Buttons -->
+        <div id="manual-buttons-container" class="opacity-50 pointer-events-none transition mt-3">
+          <div class="grid grid-cols-2 gap-2">
+            <button onmousedown="startManualDrive(true)" onmouseup="stopManualDrive()" onmouseleave="stopManualDrive()" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 active:bg-red-700 rounded-lg text-[11px] font-bold border border-slate-700">▲ TILT UP</button>
+            <button onmousedown="startManualDrive(false)" onmouseup="stopManualDrive()" onmouseleave="stopManualDrive()" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 active:bg-red-700 rounded-lg text-[11px] font-bold border border-slate-700">▼ TILT DN</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TVS Apache RR 310 CAN Speed -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex justify-between items-center text-xs mb-1.5 font-semibold">
+          <span class="text-slate-400">APACHE CAN SPEED</span>
+          <span id="label-speed-val" class="font-mono text-sky-400 text-sm font-bold">0 km/h</span>
+        </div>
+        <input id="slider-speed" type="range" min="0" max="140" value="0" step="5" oninput="updateSpeed(this.value)" class="w-full accent-red-600 bg-slate-800 h-2 rounded-lg cursor-pointer">
+        <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-1">
+          <span>0 (Stationary)</span>
+          <span>60 (City)</span>
+          <span>100 (Cruise)</span>
+          <span>140 (Track)</span>
+        </div>
+      </div>
+
+      <!-- FLEXIBLE CONTINUOUS RIDER STATURE SLIDER (160 cm to 188 cm) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex justify-between items-center text-xs mb-1.5 font-semibold">
+          <span class="text-slate-300 uppercase tracking-wider font-bold">Rider Stature (160–188 cm)</span>
+          <span id="label-rider-slider-val" class="font-mono text-sky-400 text-sm font-black">175 cm</span>
+        </div>
+        
+        <!-- Continuous Slider from 160 to 188 -->
+        <input id="slider-rider-height" type="range" min="160" max="188" value="175" step="1" oninput="updateRiderHeight(this.value)" class="w-full accent-sky-400 bg-slate-800 h-2.5 rounded-lg cursor-pointer mt-1">
+        
+        <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-1">
+          <span>160 cm (Min)</span>
+          <span>174 cm (Mid)</span>
+          <span>188 cm (Max)</span>
+        </div>
+
+        <!-- Quick Posture & Preset Buttons -->
+        <div class="grid grid-cols-4 gap-1.5 mt-3">
+          <button onclick="setRiderPreset(160)" class="py-1 px-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[10px] rounded border border-slate-700 text-center">160cm</button>
+          <button onclick="setRiderPreset(170)" class="py-1 px-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[10px] rounded border border-slate-700 text-center">170cm</button>
+          <button onclick="setRiderPreset(180)" class="py-1 px-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[10px] rounded border border-slate-700 text-center">180cm</button>
+          <button onclick="setRiderPreset(188)" class="py-1 px-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[10px] rounded border border-slate-700 text-center">188cm</button>
+        </div>
+
+        <!-- Sport Track Crouch Toggle -->
+        <div class="mt-2.5">
+          <button id="btn-tuck-toggle" onclick="toggleSportTuck()" class="w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-700 active:bg-red-800 text-slate-300 font-bold text-xs rounded-lg border border-slate-700 flex items-center justify-center gap-1.5 transition">
+            <span id="tuck-icon" class="w-2 h-2 rounded-full bg-slate-500"></span>
+            <span id="tuck-text">Track Crouch (Sport Tuck Mode: OFF)</span>
+          </button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    // -------------------------------------------------------------
+    // SYSTEM STATE & KINEMATICS
+    // -------------------------------------------------------------
+    let currentAngle = 55.0;
+    let targetAngle  = 55.0;
+    let vehicleSpeed = 0.0;
+    let activeMode   = 'AUTO';
+    let systemState  = 'IDLE';
+    let motorCurrent = 0.0;
+    let manualHoldDir = null;
+
+    // Flexible Rider Stature State (Continuous Range: 160 cm to 188 cm)
+    let riderHeight = 175.0;
+    let isSportTuck = false;
+
+    // Fault Injection Flags
+    let faultStall = false;
+    let faultCamera = false;
+    let faultPower = false;
+
+    // -------------------------------------------------------------
+    // CAMERA PERCEPTION MODULE (LIVE WEBCAM & SYNTHETIC HUD)
+    // -------------------------------------------------------------
+    const video = document.getElementById('webcamVideo');
+    const vCanvas = document.getElementById('visionCanvas');
+    const vCtx = vCanvas.getContext('2d');
+    let isWebcamActive = false;
+    let webcamStream = null;
+
+    // Simulated Rider Head & Posture Variables for tracking
+    let trackedHead = { x: 160, y: 110, w: 90, h: 110, conf: 0.96 };
+    let targetHeadY = 110;
+
+    async function toggleWebcam() {
+      const btnText = document.getElementById('btn-camera-text');
+      if (!isWebcamActive) {
+        try {
+          webcamStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 320, height: 240, facingMode: 'user' },
+            audio: false
+          });
+          video.srcObject = webcamStream;
+          video.play();
+          isWebcamActive = true;
+          if (btnText) btnText.innerText = "Stop Webcam";
+          logSerial('$CAMERA_INIT,SONY_IMX708=ONLINE,STREAM=30FPS*44');
+        } catch (err) {
+          console.warn("Webcam access declined or not supported:", err);
+          alert("Webcam access not granted or unavailable. Running in high-fidelity synthetic camera simulation mode.");
+        }
+      } else {
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(track => track.stop());
+        }
+        video.srcObject = null;
+        isWebcamActive = false;
+        if (btnText) btnText.innerText = "Start Webcam";
+        logSerial('$CAMERA_STANDBY,FEED=SYNTHETIC_SIM*18');
+      }
+    }
+
+    function calibrateRiderNow() {
+      if (vehicleSpeed > 0) {
+        logSerial('$VETO,CALIBRATE_DENIED_WHILE_MOVING,SPEED>0*7A');
+        return;
+      }
+      logSerial('$VISION_CALIBRATE_START,STATIONARY_DWELL=3.0S*2A');
+      setTimeout(() => {
+        logSerial(`$VISION_CALIBRATED,STATURE=${riderHeight.toFixed(0)}CM,TARGET=${targetAngle.toFixed(1)}DEG*99`);
+      }, 600);
+    }
+
+    // Continuous Rider Height Update Handler (Flexible 160 - 188 cm)
+    function updateRiderHeight(val) {
+      riderHeight = parseFloat(val);
+      isSportTuck = false; // Reset tuck mode when user adjusts height
+      updateTuckUI();
+
+      // Ratio t in [0.0, 1.0] across 160cm to 188cm
+      const t = (riderHeight - 160.0) / 28.0;
+
+      // Update text displays
+      document.getElementById('label-rider-slider-val').innerText = riderHeight.toFixed(0) + ' cm';
+      document.getElementById('label-rider-height').innerText = riderHeight.toFixed(0) + ' cm';
+
+      let classificationName = "Standard Stature";
+      if (riderHeight < 168) classificationName = "Compact / Short Stature";
+      else if (riderHeight > 180) classificationName = "Tall Stature";
+      document.getElementById('label-rider-detected').innerText = classificationName;
+
+      // Simulated head position in camera frame (y moves from 135 down to 80 as height increases)
+      targetHeadY = 135 - t * 55;
+
+      // Calculated Torso Angle (moves from 52.0° to 67.5°)
+      const calculatedTorsoAngle = 52.0 + t * 15.5;
+      document.getElementById('hud-torso-deg').innerText = calculatedTorsoAngle.toFixed(1) + '°';
+
+      recalculateTargetAngle();
+      logSerial(`$VISION_INPUT,STATURE=${riderHeight.toFixed(0)}CM,TORSO=${calculatedTorsoAngle.toFixed(1)}DEG,REQ=${targetAngle.toFixed(1)}DEG*31`);
+    }
+
+    function setRiderPreset(val) {
+      document.getElementById('slider-rider-height').value = val;
+      updateRiderHeight(val);
+    }
+
+    function toggleSportTuck() {
+      isSportTuck = !isSportTuck;
+      updateTuckUI();
+      recalculateTargetAngle();
+      logSerial(`$POSTURE_OVERRIDE,SPORT_TUCK=${isSportTuck ? 'ON' : 'OFF'}*1B`);
+    }
+
+    function updateTuckUI() {
+      const btn = document.getElementById('btn-tuck-toggle');
+      const icon = document.getElementById('tuck-icon');
+      const text = document.getElementById('tuck-text');
+      if (isSportTuck) {
+        btn.className = 'w-full py-1.5 px-2 bg-red-950 border border-red-600 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition shadow';
+        icon.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+        text.innerText = 'Track Crouch (Sport Tuck Mode: ACTIVE)';
+        document.getElementById('label-rider-detected').innerText = 'Track Crouch (Aero Tuck)';
+        document.getElementById('hud-torso-deg').innerText = '44.0°';
+        targetHeadY = 150;
+      } else {
+        btn.className = 'w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-lg border border-slate-700 flex items-center justify-center gap-1.5 transition';
+        icon.className = 'w-2 h-2 rounded-full bg-slate-500';
+        text.innerText = 'Track Crouch (Sport Tuck Mode: OFF)';
+        const t = (riderHeight - 160.0) / 28.0;
+        targetHeadY = 135 - t * 55;
+      }
+    }
+
+    // Smooth Aerodynamic Target Angle Calculation
+    function recalculateTargetAngle() {
+      if (isSportTuck) {
+        targetAngle = 55.0; // Minimum aerodynamic drag in track tuck
+      } else {
+        // Linear interpolation across 160cm -> 56.5° and 188cm -> 73.5°
+        const t = (riderHeight - 160.0) / 28.0;
+        const baseAngle = 56.5 + t * (73.5 - 56.5);
+
+        // Speed-dependent dynamic aerodynamic trim
+        let speedOffset = 0.0;
+        if (vehicleSpeed >= 90) speedOffset = 2.5; // Highway: tilt up to push air over helmet crown
+        else if (vehicleSpeed < 50) speedOffset = -2.0; // City: tilt down for airflow cooling
+
+        targetAngle = Math.min(75.0, Math.max(55.0, baseAngle + speedOffset));
+      }
+      document.getElementById('label-rider-angle').innerText = targetAngle.toFixed(1) + '°';
+    }
+
+    // -------------------------------------------------------------
+    // KINEMATIC & CFD CANVAS
+    // -------------------------------------------------------------
+    const canvas = document.getElementById('aeroCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function resizeCanvases() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+
+      const vRect = vCanvas.getBoundingClientRect();
+      vCanvas.width = vRect.width * (window.devicePixelRatio || 1);
+      vCanvas.height = vRect.height * (window.devicePixelRatio || 1);
+      vCtx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    }
+    window.addEventListener('resize', resizeCanvases);
+    setTimeout(resizeCanvases, 50);
+
+    // Seed CFD Particles
+    for (let i = 0; i < 45; i++) {
+      particles.push({
+        x: Math.random() * 400,
+        y: Math.random() * 300,
+        speed: 1 + Math.random() * 2,
+        size: 1.5 + Math.random() * 1.5
+      });
+    }
+
+    // Main Animation Loop
+    function animate() {
+      updateSystemPhysics();
+      renderAeroCanvas();
+      renderVisionCanvas();
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+
+    // Physics & Control Loop (10ms Execution Rate)
+    function updateSystemPhysics() {
+      if (faultPower) {
+        systemState = 'FAULT';
+        motorCurrent = 0.0;
+        updateLEDs(false, false, true);
+        return;
+      }
+
+      if (faultStall) {
+        systemState = 'FAULT';
+        motorCurrent = 2.45; // Overcurrent trip threshold breached
+        updateLEDs(false, false, true);
+        return;
+      }
+
+      if (activeMode === 'OFF') {
+        systemState = 'OFF';
+        motorCurrent = 0.0;
+        updateLEDs(false, false, false);
+        return;
+      }
+
+      if (activeMode === 'MANUAL') {
+        if (manualHoldDir !== null) {
+          systemState = 'MOVING';
+          motorCurrent = 1.15;
+          const delta = manualHoldDir ? 0.35 : -0.35;
+          currentAngle = Math.min(75.0, Math.max(55.0, currentAngle + delta));
+          updateLEDs(false, true, false);
+        } else {
+          systemState = 'IDLE';
+          motorCurrent = 0.0;
+          updateLEDs(true, false, false);
+        }
+        updateTelemetry();
+        return;
+      }
+
+      // AUTO Mode Logic
+      if (activeMode === 'AUTO') {
+        if (faultCamera) {
+          systemState = 'FAULT';
+          updateLEDs(false, false, true);
+          return;
+        }
+
+        recalculateTargetAngle();
+
+        // Closed-Loop Motion Control with AS5600 feedback
+        if (Math.abs(targetAngle - currentAngle) > 0.4) {
+          systemState = 'MOVING';
+          motorCurrent = 0.95 + (vehicleSpeed / 140) * 0.45;
+          const step = (targetAngle > currentAngle) ? 0.22 : -0.22;
+          currentAngle += step;
+          updateLEDs(false, true, false);
+        } else {
+          systemState = 'IDLE';
+          motorCurrent = 0.0; // Self-locking Acme lead screw holds position
+          updateLEDs(true, false, false);
+        }
+      }
+
+      updateTelemetry();
+    }
+
+    function updateLEDs(g, a, r) {
+      document.getElementById('led-green').className = g ? 'w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'w-3 h-3 rounded-full bg-slate-700';
+      document.getElementById('led-amber').className = a ? 'w-3 h-3 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]' : 'w-3 h-3 rounded-full bg-slate-700';
+      document.getElementById('led-red').className = r ? 'w-3 h-3 rounded-full bg-red-600 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse' : 'w-3 h-3 rounded-full bg-slate-700';
+    }
+
+    function updateTelemetry() {
+      document.getElementById('disp-angle-overlay').innerText = currentAngle.toFixed(1) + '°';
+      document.getElementById('disp-speed-overlay').innerText = vehicleSpeed.toFixed(0) + ' km/h';
+      document.getElementById('stat-angle').innerText = currentAngle.toFixed(1) + '°';
+      document.getElementById('stat-target').innerText = targetAngle.toFixed(1) + '°';
+      document.getElementById('stat-current').innerText = motorCurrent.toFixed(2) + ' A';
+
+      // Drag Force: F = 0.5 * rho * v^2 * Cd * A
+      const v_ms = vehicleSpeed / 3.6;
+      const dragN = 0.5 * 1.225 * Math.pow(v_ms, 2) * 1.1 * 0.085;
+      document.getElementById('disp-drag-overlay').innerText = dragN.toFixed(1) + ' N';
+
+      // Visor Buffet Pressure Delta
+      const stockPressure = Math.round(0.085 * Math.pow(vehicleSpeed, 1.45));
+      const adaptivePressure = Math.round(stockPressure * (0.42 + (Math.abs(targetAngle - currentAngle) / 20) * 0.35));
+      document.getElementById('stat-pressure').innerText = adaptivePressure + ' Pa';
+      document.getElementById('stat-stock-pressure').innerText = stockPressure + ' Pa';
+
+      // Acoustic Noise Model
+      const baselineNoise = Math.min(102, Math.round(52 + (vehicleSpeed / 140) * 44));
+      const noiseReduction = Math.round(Math.min(11, (vehicleSpeed / 120) * 9.5 * (1 - Math.abs(targetAngle - currentAngle) / 10)));
+      document.getElementById('stat-noise').innerText = (baselineNoise - noiseReduction) + ' dB';
+      document.getElementById('stat-noise-atten').innerText = '-' + noiseReduction + ' dB';
+
+      // Update Calibration Banner based on speed
+      const banner = document.getElementById('banner-calib');
+      if (vehicleSpeed > 0) {
+        banner.className = 'absolute bottom-2 inset-x-2 py-1 px-2 rounded bg-slate-900/90 border border-slate-700 text-center text-[10px] font-mono text-slate-400';
+        banner.innerText = '🔒 CALIBRATION LOCKED (Speed > 0 km/h - Driving Mode)';
+      } else {
+        banner.className = 'absolute bottom-2 inset-x-2 py-1 px-2 rounded bg-emerald-950/90 border border-emerald-600 text-center text-[10px] font-mono font-bold text-emerald-300';
+        banner.innerText = '● KEY-ON CALIBRATION ACTIVE (Speed = 0 km/h)';
+      }
+    }
+
+    // -------------------------------------------------------------
+    // RENDER: KINEMATIC & CFD CANVAS
+    // -------------------------------------------------------------
+    function renderAeroCanvas() {
+      const w = canvas.getBoundingClientRect().width;
+      const h = canvas.getBoundingClientRect().height;
+      ctx.clearRect(0, 0, w, h);
+
+      const pivotX = w * 0.40;
+      const pivotY = h * 0.68;
+      const screenLen = 120;
+
+      const rad = (currentAngle * Math.PI) / 180.0;
+      const topX = pivotX - screenLen * Math.cos(rad);
+      const topY = pivotY - screenLen * Math.sin(rad);
+
+      // 1. Motorcycle Cowl Fairing
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pivotX - 110, pivotY + 70);
+      ctx.lineTo(pivotX - 30, pivotY + 20);
+      ctx.lineTo(pivotX, pivotY);
+      ctx.lineTo(pivotX + 80, pivotY + 25);
+      ctx.lineTo(pivotX + 160, pivotY + 50);
+      ctx.lineTo(pivotX + 180, pivotY + 120);
+      ctx.lineTo(pivotX - 110, pivotY + 120);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Apache Red Racing Decal
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(pivotX - 60, pivotY + 35);
+      ctx.lineTo(pivotX + 60, pivotY + 40);
+      ctx.stroke();
+
+      // 2. Rider Silhouette with Dynamic Continuous Head Height
+      let headYOffset = 0;
+      if (isSportTuck) {
+        headYOffset = 28;
+      } else {
+        // Continuous interpolation from 160cm (+16px lower) to 188cm (-24px higher)
+        const t = (riderHeight - 160.0) / 28.0;
+        headYOffset = 16 - t * 40;
+      }
+
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 2;
+      // Helmet
+      ctx.beginPath();
+      ctx.arc(pivotX + 120, pivotY - 70 + headYOffset, 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Visor
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(pivotX + 106, pivotY - 72 + headYOffset, 12, Math.PI * 0.6, Math.PI * 1.4);
+      ctx.fill();
+      // Torso
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.moveTo(pivotX + 120, pivotY - 44 + headYOffset);
+      ctx.lineTo(pivotX + 80, pivotY + 35);
+      ctx.lineTo(pivotX + 170, pivotY + 45);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 3. CFD Streamlines
+      const flowSpeed = (vehicleSpeed / 140) * 8 + 0.5;
+      ctx.fillStyle = vehicleSpeed > 70 ? 'rgba(56, 189, 248, 0.75)' : 'rgba(148, 163, 184, 0.45)';
+      
+      particles.forEach(p => {
+        p.x += flowSpeed * p.speed;
+        if (p.x > w) p.x = 0;
+
+        let drawY = p.y;
+        if (p.x > topX - 70 && p.x < pivotX + 160) {
+          const ratio = (p.x - (topX - 70)) / 230;
+          if (p.y > topY - 30) {
+            drawY = topY - 20 - (1 - ratio) * 20;
+          }
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.x, drawY, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // 4. Windscreen Blade
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(pivotX, pivotY);
+      ctx.lineTo(topX, topY);
+      ctx.stroke();
+
+      // 5. Lower Pivot Shaft & Actuator Crank
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(pivotX, pivotY, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Crank Lever
+      const crankRad = rad - Math.PI / 2;
+      const crankX = pivotX + 32 * Math.cos(crankRad);
+      const crankY = pivotY + 32 * Math.sin(crankRad);
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(pivotX, pivotY);
+      ctx.lineTo(crankX, crankY);
+      ctx.stroke();
+
+      // Linear Actuator
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(crankX, crankY);
+      ctx.lineTo(pivotX + 45, pivotY + 55);
+      ctx.stroke();
+    }
+
+    // -------------------------------------------------------------
+    // RENDER: LIVE AI CAMERA VISION MODULE CANVAS
+    // -------------------------------------------------------------
+    function renderVisionCanvas() {
+      const vw = vCanvas.getBoundingClientRect().width;
+      const vh = vCanvas.getBoundingClientRect().height;
+      vCtx.clearRect(0, 0, vw, vh);
+
+      if (isWebcamActive && video.readyState >= 2) {
+        vCtx.save();
+        vCtx.scale(-1, 1);
+        vCtx.drawImage(video, -vw, 0, vw, vh);
+        vCtx.restore();
+      } else {
+        const grad = vCtx.createLinearGradient(0, 0, 0, vh);
+        grad.addColorStop(0, '#090d16');
+        grad.addColorStop(1, '#020617');
+        vCtx.fillStyle = grad;
+        vCtx.fillRect(0, 0, vw, vh);
+
+        // Draw cockpit grid
+        vCtx.strokeStyle = 'rgba(30, 41, 59, 0.4)';
+        vCtx.lineWidth = 1;
+        for (let x = 0; x < vw; x += 30) {
+          vCtx.beginPath(); vCtx.moveTo(x, 0); vCtx.lineTo(x, vh); vCtx.stroke();
+        }
+        for (let y = 0; y < vh; y += 30) {
+          vCtx.beginPath(); vCtx.moveTo(0, y); vCtx.lineTo(vw, y); vCtx.stroke();
+        }
+
+        // Draw Synthetic Rider Silhouette
+        const simX = vw / 2;
+        const simY = trackedHead.y + 10;
+        // Helmet head
+        vCtx.fillStyle = '#1e293b';
+        vCtx.strokeStyle = '#334155';
+        vCtx.lineWidth = 2;
+        vCtx.beginPath();
+        vCtx.arc(simX, simY, 40, 0, Math.PI * 2);
+        vCtx.fill();
+        vCtx.stroke();
+        // Visor
+        vCtx.fillStyle = '#0f172a';
+        vCtx.strokeStyle = '#38bdf8';
+        vCtx.lineWidth = 2;
+        vCtx.fillRect(simX - 25, simY - 10, 50, 18);
+        vCtx.strokeRect(simX - 25, simY - 10, 50, 18);
+      }
+
+      // Smooth tracking towards target head position
+      trackedHead.y += (targetHeadY - trackedHead.y) * 0.1;
+      const hx = vw / 2 - 45;
+      const hy = trackedHead.y - 40;
+      const hw = 90;
+      const hh = 100;
+
+      // Draw YOLOv8 Detection Bounding Box on Helmet
+      vCtx.strokeStyle = '#ef4444';
+      vCtx.lineWidth = 2;
+      vCtx.strokeRect(hx, hy, hw, hh);
+
+      // Corner tech brackets
+      const bl = 12;
+      vCtx.strokeStyle = '#ffffff';
+      vCtx.lineWidth = 3;
+      // Top-Left
+      vCtx.beginPath(); vCtx.moveTo(hx, hy + bl); vCtx.lineTo(hx, hy); vCtx.lineTo(hx + bl, hy); vCtx.stroke();
+      // Top-Right
+      vCtx.beginPath(); vCtx.moveTo(hx + hw - bl, hy); vCtx.lineTo(hx + hw, hy); vCtx.lineTo(hx + hw, hy + bl); vCtx.stroke();
+      // Bottom-Left
+      vCtx.beginPath(); vCtx.moveTo(hx, hy + hh - bl); vCtx.lineTo(hx, hy + hh); vCtx.lineTo(hx + bl, hy + hh); vCtx.stroke();
+      // Bottom-Right
+      vCtx.beginPath(); vCtx.moveTo(hx + hw - bl, hy + hh); vCtx.lineTo(hx + hw, hy + hh); vCtx.lineTo(hx + hw, hy + hh - bl); vCtx.stroke();
+
+      // Label Badge
+      vCtx.fillStyle = '#ef4444';
+      vCtx.fillRect(hx, hy - 18, 120, 18);
+      vCtx.fillStyle = '#ffffff';
+      vCtx.font = 'bold 9px monospace';
+      vCtx.fillText('HELMET: ' + (trackedHead.conf * 100).toFixed(0) + '%', hx + 4, hy - 5);
+
+      // Keypoint Dots & Skeleton
+      const kx = vw / 2;
+      const ky = trackedHead.y;
+      // Eye line
+      vCtx.fillStyle = '#38bdf8';
+      vCtx.beginPath(); vCtx.arc(kx - 16, ky - 5, 4, 0, Math.PI * 2); vCtx.fill();
+      vCtx.beginPath(); vCtx.arc(kx + 16, ky - 5, 4, 0, Math.PI * 2); vCtx.fill();
+      // Interocular axis
+      vCtx.strokeStyle = '#38bdf8';
+      vCtx.lineWidth = 1.5;
+      vCtx.beginPath(); vCtx.moveTo(kx - 16, ky - 5); vCtx.lineTo(kx + 16, ky - 5); vCtx.stroke();
+
+      // Shoulders
+      vCtx.fillStyle = '#f59e0b';
+      vCtx.beginPath(); vCtx.arc(kx - 50, ky + 55, 4, 0, Math.PI * 2); vCtx.fill();
+      vCtx.beginPath(); vCtx.arc(kx + 50, ky + 55, 4, 0, Math.PI * 2); vCtx.fill();
+      vCtx.strokeStyle = '#f59e0b';
+      vCtx.beginPath(); vCtx.moveTo(kx - 50, ky + 55); vCtx.lineTo(kx + 50, ky + 55); vCtx.stroke();
+
+      // Spine vertical
+      vCtx.strokeStyle = '#a855f7';
+      vCtx.beginPath(); vCtx.moveTo(kx, ky + 10); vCtx.lineTo(kx, ky + 90); vCtx.stroke();
+    }
+
+    // -------------------------------------------------------------
+    // HMI CONTROLS & EVENT HANDLERS
+    // -------------------------------------------------------------
+    function setMode(mode) {
+      activeMode = mode;
+      ['auto', 'manual', 'off'].forEach(m => {
+        const btn = document.getElementById('btn-mode-' + m);
+        if (m === mode.toLowerCase()) {
+          btn.className = 'py-1.5 text-xs font-bold rounded-lg bg-red-600 text-white shadow transition';
+        } else {
+          btn.className = 'py-1.5 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition';
+        }
+      });
+
+      const manContainer = document.getElementById('manual-buttons-container');
+      if (mode === 'MANUAL') {
+        manContainer.className = 'opacity-100 transition mt-3';
+      } else {
+        manContainer.className = 'opacity-50 pointer-events-none transition mt-3';
+        manualHoldDir = null;
+      }
+      logSerial(`$MODE_SWITCH,NEW_MODE=${mode}*1A`);
+    }
+
+    function startManualDrive(dirUp) {
+      if (activeMode !== 'MANUAL') return;
+      manualHoldDir = dirUp;
+      logSerial(`$MANUAL_JOG,DIR=${dirUp ? 'UP' : 'DN'},PWM=220*3B`);
+    }
+
+    function stopManualDrive() {
+      manualHoldDir = null;
+      logSerial('$MANUAL_STOP,BRAKE_APPLIED*4F');
+    }
+
+    function updateSpeed(val) {
+      vehicleSpeed = parseFloat(val);
+      document.getElementById('label-speed-val').innerText = vehicleSpeed.toFixed(0) + ' km/h';
+      recalculateTargetAngle();
+      logSerial(`$CAN_VSS,SPEED=${vehicleSpeed.toFixed(1)}KMH,CRC=OK*09`);
+    }
+
+    function toggleFault(type, enabled) {
+      if (type === 'STALL') faultStall = enabled;
+      if (type === 'CAMERA') faultCamera = enabled;
+      if (type === 'POWER') faultPower = enabled;
+      logSerial(`$FAULT_INJECT,TYPE=${type},STATE=${enabled ? 'ACTIVE' : 'CLEARED'}*55`);
+    }
+
+    function logSerial(msg) {
+      const c = document.getElementById('serialConsole');
+      const time = new Date().toISOString().substring(11, 19);
+      const row = document.createElement('div');
+      row.innerText = `[${time}] ${msg}`;
+      c.appendChild(row);
+      c.scrollTop = c.scrollHeight;
+    }
+
+    // Initial Serial Telemetry Boot
+    logSerial('$SYS_BOOT,ESP32_CORE0=CAN_COMM,CORE1=PID_MOTOR*66');
+    logSerial('$IMX708_CAM,SONY_SENSOR=DETECTED,YOLO_WEIGHTS=LOADED*88');
+    logSerial('$STANDBY_READY,VBUS=12.6V,AS5600=0x08C4*12');
+    recalculateTargetAngle();
+  </script>
+</body>
+</html>
